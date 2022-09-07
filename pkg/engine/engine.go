@@ -15,11 +15,11 @@ var NotImplementedErr = errors.New("Not Implemented")
 type lineEnding int
 
 const (
-	LF lineEnding = iota
+	NONE lineEnding = iota
+	LF
 	CRLF
 	INVALID
 	UNKNOWN
-	NONE
 )
 
 type guts struct {
@@ -29,8 +29,8 @@ type guts struct {
 
 type buffer struct {
 	name       string
-	body       []bytes.Buffer
-	cursorPos  struct{ x, y int }
+	content    [][]byte
+	cursorPos  struct{ ln, col int }
 	file       *os.File
 	dirty      bool
 	id         int
@@ -92,11 +92,47 @@ func (g *guts) NewBufferFromFile(filename string) (Buffer, error) {
 	filename = path.Clean(filename)
 	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0755)
 	if err != nil {
-		return nil, fmt.Errorf("Could not create buffer: %w", err)
+		return nil, err
 	}
 	b := &buffer{id: g.genID(), file: f, name: filename}
 	b.lineEnding = detirmineLineEndings(f)
+	err = readFileIntoBuffer(b, f)
+	if err != nil {
+		return nil, err
+	}
 	return b, nil
+}
+
+func readFileIntoBuffer(b *buffer, f *os.File) error {
+	r := bufio.NewReader(f)
+	var buf bytes.Buffer
+	var wasPrefix bool
+	for {
+		l, pf, err := r.ReadLine()
+		fmt.Println(string(l))
+		if err != nil && err != io.EOF {
+			return err
+		}
+		if pf {
+			wasPrefix = true
+			buf.Write(l)
+		} else {
+			if wasPrefix {
+				wasPrefix = false
+				buf.Write(l)
+				b.content = append(b.content, buf.Bytes())
+			} else {
+				if len(l) > 0 {
+					b.content = append(b.content, l)
+				}
+			}
+		}
+		if err == io.EOF {
+			fmt.Println("EOF")
+			break
+		}
+	}
+	return nil
 }
 
 func (b *buffer) Save() error                                  { return NotImplementedErr }
