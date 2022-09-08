@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path"
@@ -21,6 +20,8 @@ const (
 	INVALID
 	UNKNOWN
 )
+
+var lineEndingString = map[lineEnding]string{LF: "\n", CRLF: "\r\n"}
 
 type guts struct {
 	buffers []Buffer
@@ -94,8 +95,11 @@ func (g *guts) NewBufferFromFile(filename string) (Buffer, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := &buffer{id: g.genID(), file: f, name: filename}
-	b.lineEnding = detirmineLineEndings(f)
+	b := &buffer{
+		id:         g.genID(),
+		lineEnding: determineLineEndings(f),
+	}
+
 	err = readFileIntoBuffer(b, f)
 	if err != nil {
 		return nil, err
@@ -104,12 +108,15 @@ func (g *guts) NewBufferFromFile(filename string) (Buffer, error) {
 }
 
 func readFileIntoBuffer(b *buffer, f *os.File) error {
+	b.name = f.Name()
+	b.file = f
+	defer f.Seek(0, io.SeekStart)
+
 	r := bufio.NewReader(f)
 	var buf bytes.Buffer
 	var wasPrefix bool
 	for {
 		l, pf, err := r.ReadLine()
-		fmt.Println(string(l))
 		if err != nil && err != io.EOF {
 			return err
 		}
@@ -128,23 +135,26 @@ func readFileIntoBuffer(b *buffer, f *os.File) error {
 			}
 		}
 		if err == io.EOF {
-			fmt.Println("EOF")
 			break
 		}
 	}
 	return nil
 }
 
-func (b *buffer) Save() error                                  { return NotImplementedErr }
+func (b *buffer) Save() error {
+	return NotImplementedErr
+}
+
 func (b *buffer) SaveAs(string) error                          { return NotImplementedErr }
 func (b *buffer) Read([]byte) (int, error)                     { return 0, NotImplementedErr }
 func (b *buffer) Write([]byte) (int, error)                    { return 0, NotImplementedErr }
 func (b *buffer) Seek(offset int64, whence int) (int64, error) { return 0, NotImplementedErr }
 func (b *buffer) GetID() int                                   { return b.id }
 
-func detirmineLineEndings(f *os.File) lineEnding {
+func determineLineEndings(f *os.File) lineEnding {
 	r := bufio.NewReader(f)
 	checked := false
+	defer f.Seek(0, io.SeekStart)
 	for {
 		b, err := r.ReadByte()
 		if err != nil {

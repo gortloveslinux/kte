@@ -1,0 +1,2 @@
+[ ] Refactor readline to readbytes. Use "\n" as delimiter
+[ ] Remove determineLineEndings. Get info while reading in file, or if new file default to system
