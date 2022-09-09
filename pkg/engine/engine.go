@@ -14,11 +14,8 @@ var NotImplementedErr = errors.New("Not Implemented")
 type lineEnding int
 
 const (
-	NONE lineEnding = iota
-	LF
+	LF lineEnding = iota
 	CRLF
-	INVALID
-	UNKNOWN
 )
 
 var lineEndingString = map[lineEnding]string{LF: "\n", CRLF: "\r\n"}
@@ -96,8 +93,7 @@ func (g *guts) NewBufferFromFile(filename string) (Buffer, error) {
 		return nil, err
 	}
 	b := &buffer{
-		id:         g.genID(),
-		lineEnding: determineLineEndings(f),
+		id: g.genID(),
 	}
 
 	err = readFileIntoBuffer(b, f)
@@ -111,28 +107,30 @@ func readFileIntoBuffer(b *buffer, f *os.File) error {
 	b.name = f.Name()
 	b.file = f
 	defer f.Seek(0, io.SeekStart)
-
 	r := bufio.NewReader(f)
-	var buf bytes.Buffer
-	var wasPrefix bool
+
+	// read first line and detrmine line endings
+	l, err := r.ReadBytes('\n')
+	if err != nil && err != io.EOF {
+		return err
+	}
+
+	if len(l) > 2 {
+		if bytes.Compare(l[len(l)-2:], []byte("\r\n")) == 0 {
+			b.lineEnding = CRLF
+		} else {
+			b.lineEnding = LF
+		}
+	}
+	b.content = append(b.content, l)
+
 	for {
-		l, pf, err := r.ReadLine()
+		l, err := r.ReadBytes('\n')
 		if err != nil && err != io.EOF {
 			return err
 		}
-		if pf {
-			wasPrefix = true
-			buf.Write(l)
-		} else {
-			if wasPrefix {
-				wasPrefix = false
-				buf.Write(l)
-				b.content = append(b.content, buf.Bytes())
-			} else {
-				if len(l) > 0 {
-					b.content = append(b.content, l)
-				}
-			}
+		if len(l) > 0 {
+			b.content = append(b.content, l)
 		}
 		if err == io.EOF {
 			break
@@ -150,32 +148,3 @@ func (b *buffer) Read([]byte) (int, error)                     { return 0, NotIm
 func (b *buffer) Write([]byte) (int, error)                    { return 0, NotImplementedErr }
 func (b *buffer) Seek(offset int64, whence int) (int64, error) { return 0, NotImplementedErr }
 func (b *buffer) GetID() int                                   { return b.id }
-
-func determineLineEndings(f *os.File) lineEnding {
-	r := bufio.NewReader(f)
-	checked := false
-	defer f.Seek(0, io.SeekStart)
-	for {
-		b, err := r.ReadByte()
-		if err != nil {
-			if !checked {
-				return UNKNOWN
-			}
-			return NONE
-		}
-		checked = true
-		switch b {
-		case '\r':
-			bs, err := r.Peek(1)
-			if err != nil {
-				return INVALID
-			}
-			if bs[0] == '\n' {
-				return CRLF
-			}
-		case '\n':
-			return LF
-		}
-	}
-	return NONE
-}
