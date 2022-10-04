@@ -1,2 +1,2 @@
-# Vacme
+# KTE
 A text editor
